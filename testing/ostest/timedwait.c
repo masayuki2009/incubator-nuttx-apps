@@ -45,8 +45,43 @@ static pthread_cond_t  cond;
  * Private Functions
  ****************************************************************************/
 
+static void *thread_busy(void *parameter)
+{
+  struct timespec base;
+  struct timespec ts;
+  int status;
+
+  UNUSED(parameter);
+
+  status = clock_gettime(CLOCK_REALTIME, &base);
+  if (status != 0)
+    {
+      return NULL;
+    }
+
+  while (1)
+    {
+      status = clock_gettime(CLOCK_REALTIME, &ts);
+      if (status != 0)
+        {
+          printf("thread_busy: ERROR clock_gettime failed\n");
+          break;
+        }
+
+      if (ts.tv_sec - base.tv_sec > 5)
+        {
+          break;
+        }
+
+      usleep(1);
+    }
+
+  return NULL;
+}
+
 static void *thread_waiter(void *parameter)
 {
+  struct timespec base;
   struct timespec ts;
   int status;
 
@@ -62,36 +97,56 @@ static void *thread_waiter(void *parameter)
 
   printf("thread_waiter: Starting 5 second wait for condition\n");
 
-  status = clock_gettime(CLOCK_REALTIME, &ts);
+  status = clock_gettime(CLOCK_REALTIME, &base);
   if (status != 0)
     {
       printf("thread_waiter: ERROR clock_gettime failed\n");
+      goto bail;
     }
 
-  ts.tv_sec += 5;
-
-  /* The wait -- no-one is ever going to awaken us */
-
-  status = pthread_cond_timedwait(&cond, &mutex, &ts);
-  if (status != 0)
+  while (1)
     {
-      if (status == ETIMEDOUT)
+      status = clock_gettime(CLOCK_REALTIME, &ts);
+      if (status != 0)
         {
-          printf("thread_waiter: pthread_cond_timedwait timed out\n");
+          printf("thread_waiter: ERROR clock_gettime failed\n");
+          break;
+        }
+
+      if (ts.tv_sec - base.tv_sec > 5)
+        {
+          break;
+        }
+
+      ts.tv_nsec += 10 * 1000;
+      if (ts.tv_nsec >= 1000 * 1000000)
+        {
+          ts.tv_sec  += 1;
+          ts.tv_nsec -= (1000 * 1000000);
+        }
+
+      /* The wait -- no-one is ever going to awaken us */
+
+      status = pthread_cond_timedwait(&cond, &mutex, &ts);
+      if (status != 0)
+        {
+          if (status != ETIMEDOUT)
+            {
+              printf("thread_waiter: "
+                     "ERROR pthread_cond_timedwait failed, status=%d\n", status);
+              break;
+            }
         }
       else
         {
-          printf("thread_waiter: "
-                 "ERROR pthread_cond_timedwait failed, status=%d\n", status);
+          printf("thread_waiter: ERROR "
+                 "pthread_cond_timedwait returned without timeout, status=%d\n",
+                  status);
+          break;
         }
     }
-  else
-    {
-      printf("thread_waiter: ERROR "
-             "pthread_cond_timedwait returned without timeout, status=%d\n",
-              status);
-    }
 
+bail:
   /* Release the mutex */
 
   printf("thread_waiter: Releasing mutex\n");
@@ -158,7 +213,13 @@ void timedwait_test(void)
       sparam.sched_priority = PTHREAD_DEFAULT_PRIORITY;
     }
 
-  sparam.sched_priority = (prio_max + sparam.sched_priority) / 2;
+  status = pthread_create(&waiter, &attr, thread_busy, NULL);
+  if (status != 0)
+    {
+      printf("timedwait_test: pthread_create failed, status=%d\n", status);
+    }
+
+  sparam.sched_priority -= 1;
   status = pthread_attr_setschedparam(&attr, &sparam);
   if (status != OK)
     {
