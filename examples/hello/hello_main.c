@@ -24,6 +24,7 @@
 
 #include <nuttx/config.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /****************************************************************************
  * Public Functions
@@ -35,6 +36,11 @@
 
 int main(int argc, FAR char *argv[])
 {
+  void *p = NULL;
+  printf("p=%p\n", p);
+  p = malloc(512);
+  printf("p=%p\n", p);
+  free(p);
   printf("Hello, World!!\n");
   return 0;
 }
