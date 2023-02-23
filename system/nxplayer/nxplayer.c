@@ -1103,6 +1103,7 @@ static FAR void *nxplayer_playthread(pthread_addr_t pvarg)
             audinfo("Play complete.  outstanding=%d\n", outstanding);
             DEBUGASSERT(outstanding == 0);
 #endif
+            printf("Play complete.  outstanding=%d\n", 0);
             running = false;
             break;
 
