@@ -34,7 +34,6 @@
 #include "nsh.h"
 #include "nsh_console.h"
 #include "nshlib/nshlib.h"
-#include "system/readline.h"
 
 #ifdef CONFIG_NSH_TELNET_LOGIN
 
@@ -66,7 +65,8 @@ static void nsh_telnetecho(FAR struct console_stdio_s *pstate,
   optbuf[1] = (is_use == TELNET_USE_ECHO) ? TELNET_WILL : TELNET_DO;
   optbuf[2] = 1;
   optbuf[3] = 0;
-  write(OUTFD(pstate), optbuf, strlen((FAR const char *)optbuf));
+  fputs((FAR char *)optbuf, pstate->cn_outstream);
+  fflush(pstate->cn_outstream);
 }
 
 /****************************************************************************
@@ -178,7 +178,8 @@ int nsh_telnetlogin(FAR struct console_stdio_s *pstate)
 
   /* Present the NSH Telnet greeting */
 
-  write(OUTFD(pstate), g_telnetgreeting, strlen(g_telnetgreeting));
+  fputs(g_telnetgreeting, pstate->cn_outstream);
+  fflush(pstate->cn_outstream);
 
   /* Loop for the configured number of retries */
 
@@ -186,12 +187,12 @@ int nsh_telnetlogin(FAR struct console_stdio_s *pstate)
     {
       /* Ask for the login username */
 
-      write(OUTFD(pstate), g_userprompt, strlen(g_userprompt));
+      fputs(g_userprompt, pstate->cn_outstream);
+      fflush(pstate->cn_outstream);
 
       username[0] = '\0';
-      if (readline_fd(pstate->cn_line, CONFIG_NSH_LINELEN,
-                      INFD(pstate), OUTFD(pstate)) >= 0)
-
+      if (fgets(pstate->cn_line, CONFIG_NSH_LINELEN,
+                INSTREAM(pstate)) != NULL)
         {
           /* Parse out the username */
 
@@ -206,17 +207,18 @@ int nsh_telnetlogin(FAR struct console_stdio_s *pstate)
 
 #ifdef CONFIG_NSH_PLATFORM_CHALLENGE
       platform_challenge(challenge, sizeof(challenge));
-      write(OUTFD(pstate), challenge, strlen(challenge));
+      fputs(challenge, pstate->cn_outstream);
 #endif
 
       /* Ask for the login password */
 
-      write(OUTFD(pstate), g_passwordprompt, strlen(g_passwordprompt));
+      fputs(g_passwordprompt, pstate->cn_outstream);
+      fflush(pstate->cn_outstream);
       nsh_telnetecho(pstate, TELNET_NOTUSE_ECHO);
 
       password[0] = '\0';
-      if (readline_fd(pstate->cn_line, CONFIG_NSH_LINELEN,
-                      INFD(pstate), OUTFD(pstate)) >= 0)
+      if (fgets(pstate->cn_line, CONFIG_NSH_LINELEN,
+                INSTREAM(pstate)) != NULL)
         {
           /* Parse out the password */
 
@@ -242,14 +244,15 @@ int nsh_telnetlogin(FAR struct console_stdio_s *pstate)
 #  error No user verification method selected
 #endif
             {
-              write(OUTFD(pstate), g_loginsuccess, strlen(g_loginsuccess));
+              fputs(g_loginsuccess, pstate->cn_outstream);
+              fflush(pstate->cn_outstream);
               nsh_telnetecho(pstate, TELNET_USE_ECHO);
               return OK;
             }
           else
             {
-              write(OUTFD(pstate), g_badcredentials,
-                    strlen(g_badcredentials));
+              fputs(g_badcredentials, pstate->cn_outstream);
+              fflush(pstate->cn_outstream);
 #if CONFIG_NSH_LOGIN_FAILDELAY > 0
               usleep(CONFIG_NSH_LOGIN_FAILDELAY * 1000L);
 #endif
@@ -261,7 +264,8 @@ int nsh_telnetlogin(FAR struct console_stdio_s *pstate)
 
   /* Too many failed login attempts */
 
-  write(OUTFD(pstate), g_loginfailure, strlen(g_loginfailure));
+  fputs(g_loginfailure, pstate->cn_outstream);
+  fflush(pstate->cn_outstream);
   return -1;
 }
 

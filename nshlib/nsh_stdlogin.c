@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/nshlib/nsh_login.c
+ * apps/nshlib/nsh_stdlogin.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -47,10 +47,10 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: nsh_token
+ * Name: nsh_stdtoken
  ****************************************************************************/
 
-static void nsh_token(FAR struct console_stdio_s *pstate,
+static void nsh_stdtoken(FAR struct console_stdio_s *pstate,
                       FAR char *buffer, size_t buflen)
 {
   FAR char *start;
@@ -134,7 +134,7 @@ static void nsh_token(FAR struct console_stdio_s *pstate,
  ****************************************************************************/
 
 /****************************************************************************
- * Name: nsh_login
+ * Name: nsh_stdlogin
  *
  * Description:
  *   Prompt the user for a username and password.  Return a failure if valid
@@ -142,7 +142,7 @@ static void nsh_token(FAR struct console_stdio_s *pstate,
  *
  ****************************************************************************/
 
-int nsh_login(FAR struct console_stdio_s *pstate)
+int nsh_stdlogin(FAR struct console_stdio_s *pstate)
 {
   char username[16];
   char password[128];
@@ -163,21 +163,30 @@ int nsh_login(FAR struct console_stdio_s *pstate)
 
   for (i = 0; i < CONFIG_NSH_LOGIN_FAILCOUNT; i++)
     {
-      /* Ask for the login username */
+      /* Get the response, handling all possible cases */
 
       username[0] = '\0';
-      fputs(g_userprompt, pstate->cn_outstream);
-      fflush(pstate->cn_outstream);
+
+#ifdef CONFIG_NSH_CLE
+      /* cle() returns a negated errno value on failure */
+
+      ret = cle(pstate->cn_line, g_userprompt, CONFIG_NSH_LINELEN,
+                stdin, stdout);
+      if (ret >= 0)
+#else
+      /* Ask for the login username */
+
+      printf("%s", g_userprompt);
 
       /* readline() returns EOF on failure */
 
-      ret = readline(pstate->cn_line, CONFIG_NSH_LINELEN,
-                     INSTREAM(pstate), OUTSTREAM(pstate));
+      ret = std_readline(pstate->cn_line, CONFIG_NSH_LINELEN);
       if (ret != EOF)
+#endif
         {
           /* Parse out the username */
 
-          nsh_token(pstate, username, sizeof(username));
+          nsh_stdtoken(pstate, username, sizeof(username));
         }
 
       if (username[0] == '\0')
@@ -188,22 +197,18 @@ int nsh_login(FAR struct console_stdio_s *pstate)
 
 #ifdef CONFIG_NSH_PLATFORM_CHALLENGE
       platform_challenge(challenge, sizeof(challenge));
-      fputs(challenge, pstate->cn_outstream);
-      fflush(pstate->cn_outstream);
+      printf("%s", challenge);
 #endif
-
       /* Ask for the login password */
 
-      fputs(g_passwordprompt, pstate->cn_outstream);
-      fflush(pstate->cn_outstream);
+      printf("%s", g_passwordprompt);
 
       password[0] = '\0';
-      if (fgets(pstate->cn_line, CONFIG_NSH_LINELEN,
-                INSTREAM(pstate)) != NULL)
+      if (fgets(pstate->cn_line, CONFIG_NSH_LINELEN, stdin) != NULL)
         {
           /* Parse out the password */
 
-          nsh_token(pstate, password, sizeof(password));
+          nsh_stdtoken(pstate, password, sizeof(password));
 
           /* Verify the username and password */
 
@@ -226,14 +231,12 @@ int nsh_login(FAR struct console_stdio_s *pstate)
 #  error No user verification method selected
 #endif
             {
-              fputs(g_loginsuccess, pstate->cn_outstream);
-              fflush(pstate->cn_outstream);
+              printf("%s", g_loginsuccess);
               return OK;
             }
           else
             {
-              fputs(g_badcredentials, pstate->cn_outstream);
-              fflush(pstate->cn_outstream);
+              printf("%s", g_badcredentials);
 #if CONFIG_NSH_LOGIN_FAILDELAY > 0
               usleep(CONFIG_NSH_LOGIN_FAILDELAY * 1000L);
 #endif
@@ -243,8 +246,7 @@ int nsh_login(FAR struct console_stdio_s *pstate)
 
   /* Too many failed login attempts */
 
-  fputs(g_loginfailure, pstate->cn_outstream);
-  fflush(pstate->cn_outstream);
+  printf("%s", g_loginfailure);
   return -1;
 }
 
